@@ -5,6 +5,10 @@ TARGET = brightnessctl
 
 DEFINES += _POSIX_C_SOURCE=200809L
 
+CONFIG(debug, debug | release) {
+    DEFINES += DEBUG
+}
+
 HEADERS =
 
 SOURCES = \

@@ -12,6 +12,9 @@
 #include <string.h>
 #include <math.h>
 
+#define VERSION "0.5"
+
+
 static char *path = "/sys/class";
 static char *classes[] = { "backlight", "leds", NULL };
 
@@ -184,11 +187,13 @@ int main(int argc, char **argv) {
 	if ((p.operation == SET || p.restore) && !p.pretend && geteuid()) {
 		errno = 0;
 		file_path = cat_with('/', path, dev->class, dev->id, "brightness");
-		if (access(file_path, W_OK)) {
-			perror("Can't modify brightness");
-			fail("\nYou should run this program with root privileges.\n"
-				"Alternatively, get write permissions for device files.\n");
-		}
+        if (access(file_path, W_OK)) {
+            perror("Can't modify brightness!!");
+#ifndef DEBUG
+            fail("\nYou should run this program with root privileges.\n"
+                "Alternatively, get write permissions for device files.\n");
+#endif
+        }
 		free(file_path);
 	}
 	if (p.save)
@@ -292,20 +297,39 @@ int print_device(struct device *dev) {
 }
 
 void apply_value(struct device *d, struct value *val) {
+    if (val->v_type == RELATIVE) {
+        //normalization
+        val->val = val->val <= 100 ? val->val: 100;
+    }
+#ifdef RK3288_BUILD
+    long orig_mod = val->v_type == ABSOLUTE ?
+            val->val : ceil(val->val / 100.0 * d->max_brightness);
+    long new, mod = val->v_type == ABSOLUTE ?
+            val->val : ceil((100 - val->val) / 100.0 * d->max_brightness);
+#else
 	long new, mod = val->v_type == ABSOLUTE ?
 			val->val : ceil(val->val / 100.0 * d->max_brightness);
+#endif
 	if (val->d_type == DIRECT) {
 		new = mod > d->max_brightness ? d->max_brightness : mod;
 		goto apply;
 	}
-	mod *= val->sign == PLUS ? 1 : -1;
+#ifdef RK3288_BUILD
+    mod = orig_mod * (val->sign == PLUS ? -1 : 1);
+#else
+    mod *= val->sign == PLUS ? 1 : -1;
+#endif
 	new = d->curr_brightness + mod;
 	if (new < 0)
 		new = 0;
 	if (new > d->max_brightness)
 		new = d->max_brightness;
 apply:
-	d->curr_brightness = new;
+#ifdef RK3288_BUILD
+    if (new == 0)
+        new = 1;
+#endif
+    d->curr_brightness = new;
 }
 
 int write_device(struct device *d) {
